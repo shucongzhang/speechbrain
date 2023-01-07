@@ -30,7 +30,7 @@ Authors
  * Jianyuan Zhong 2020
  * Mirco Ravanelli 2020
  * Peter Plantinga 2020
- * Samuele Cornell 2020, 2021, 2022
+ * Samuele Cornell 2020, 2021, 2022, 2023
  * Titouan Parcollet 2021, 2022
 """
 
@@ -42,17 +42,27 @@ from pathlib import Path
 import speechbrain as sb
 from hyperpyyaml import load_hyperpyyaml
 from speechbrain.utils.distributed import run_on_main
-
+from speechbrain.dataio.dataio import length_to_mask
 logger = logging.getLogger(__name__)
 
 
 # Define training procedure
 class ASR(sb.core.Brain):
+
+
+    def substitute_symbol(self, tensor, lengths, value):
+        mask = length_to_mask(lengths)
+        tensor = tensor.masked_fill(~(mask.bool()), value)
+        return tensor
+
     def compute_forward(self, batch, stage):
         """Forward computations from the waveform batches to the output probabilities."""
         batch = batch.to(self.device)
         wavs, wav_lens = batch.sig
-        tokens_bos, _ = batch.tokens_bos
+        tokens_bos, tokens_bos_lens = batch.tokens_bos
+
+        wav_lens = wav_lens / wavs.shape[1]
+        tokens_bos = self.substitute_symbol(tokens_bos, tokens_bos_lens)
 
         # Add augmentation if specified
         if stage == sb.Stage.TRAIN:
@@ -110,6 +120,11 @@ class ASR(sb.core.Brain):
         ids = batch.id
         tokens_eos, tokens_eos_lens = batch.tokens_eos
         tokens, tokens_lens = batch.tokens
+
+        tokens = self.substitute_symbol(tokens, tokens_lens, -1)
+        tokens_eos = self.substitute_symbol(tokens_eos, tokens_eos_lens, -1)
+        tokens_eos_lens = tokens_eos_lens / tokens_eos.shape[1]
+        tokens_lens = tokens_lens / tokens.shape[1]
 
         if hasattr(self.modules, "env_corrupt") and stage == sb.Stage.TRAIN:
             tokens_eos = torch.cat([tokens_eos, tokens_eos], dim=0)
@@ -342,7 +357,7 @@ def dataio_prepare(hparams):
             # factor = np.random.uniform(0.95, 1.05)
             # sig = resample(sig.numpy(), 16000, int(16000*factor))
             speed = sb.processing.speech_augmentation.SpeedPerturb(
-                16000, [x for x in range(95, 105)]
+                16000, [x for x in range(90, 105)]
             )
             sig = speed(sig.unsqueeze(0)).squeeze(0)  # torch.from_numpy(sig)
         else:

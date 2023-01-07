@@ -379,7 +379,7 @@ def pad_right_to(
             target_shape[i] >= tensor.shape[i]
         ), "Target shape must be >= original shape for every dim"
         pads.extend([0, target_shape[i] - tensor.shape[i]])
-        valid_vals.append(tensor.shape[j] / target_shape[j])
+        valid_vals.append(tensor.shape[j])  #/ target_shape[j]) not anymore a float ! absolute length
         i -= 1
         j += 1
 
@@ -415,7 +415,7 @@ def batch_pad_right(tensors: list, mode="constant", value=0):
 
     if len(tensors) == 1:
         # if there is only one tensor in the batch we simply unsqueeze it.
-        return tensors[0].unsqueeze(0), torch.tensor([1.0])
+        return tensors[0].unsqueeze(0), torch.tensor([tensors[0].shape[0]]) # return the length of first dimension 
 
     if not (
         any(
